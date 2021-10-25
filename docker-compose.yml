@@ -1,0 +1,73 @@
+version: '3'
+
+services:
+  broker:
+    image: redis:latest
+    container_name: docker_broker
+    restart: always
+  monitor: 
+    container_name: docker_monitor
+    image: mher/flower
+    ports:
+      - 5555:5555
+    depends_on:
+      - broker
+      - worker
+    environment:
+      - CELERY_BROKER_URL=redis://broker:6379/0
+  database:
+    image: postgres:latest
+    container_name: docker_database
+    restart: always
+    volumes:
+      - postgres:/var/lib/postgresql/data/
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+  pgadmin:
+    container_name: docker_pgadmin
+    image: dpage/pgadmin4
+    ports:
+      - 8888:80
+    depends_on:
+      - database
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
+  frontend:
+    build: ./frontend
+    container_name: docker_frontend
+    ports:
+      - 80:80
+    volumes:
+      - static:/app/static
+      - media:/app/media
+  backend:
+    container_name: docker_backend
+    build: ./backend
+    command: daphne -b 0.0.0.0 -p 8000 project.asgi:application
+    volumes:
+      - static:/usr/src/app/static
+      - media:/usr/src/app/media
+    expose:
+      - 8000
+    depends_on:
+      - database
+      - broker
+    env_file:
+      - ./.env
+  worker:
+    container_name: docker_worker
+    build: ./backend
+    command: celery -A project worker
+    depends_on:
+      - broker
+      - database
+    env_file:
+      - ./.env
+
+volumes:
+  postgres:
+  static:
+  media:
